@@ -1,0 +1,205 @@
+<?
+
+//подключаемся к базе
+$connection = mysql_connect('192.168.100.88', 'admin', '1q2w3e4r');
+if (!$connection) {
+  $result = 'mysql_connect error';
+  echo $result;
+}
+else {
+  $db_selected = mysql_select_db('test', $connection);
+  if (!$db_selected) {
+    $result = 'mysql_select_db error';
+echo $result;
+  }
+  else {
+    mysql_query('SET NAMES utf8;');
+	}
+}
+
+//запрашиваем логин и пароль
+$login = mysql_real_escape_string($_COOKIE['login']);
+$session_query = mysql_query("SELECT login FROM cloudlink_sessions WHERE login = '$login'");
+	$arr = mysql_fetch_array($session_query);
+if (!$arr['login']) {
+	header("Location: /login.php");
+	exit;
+}
+
+//выход
+if (isset($_GET['logout'])) {
+	$close_session = mysql_query("DELETE FROM cloudlink_sessions WHERE login = '$login'");
+	unset($_COOKIE);
+	header("Location: /login.php");
+}
+
+//выводим ссылки
+function showLinks() {
+$login = $_COOKIE['login'];
+
+//запрашиваем ссылки из mysql
+	$query1 = "SELECT id, link, deleted FROM cloudlink WHERE login = '$login'";
+		$links_array = mysql_query($query1);
+	
+	//выводим ссылки
+	$i = 0;
+	while ($links = mysql_fetch_array($links_array)) {
+	
+		//сохраняем изменения
+		if(isset($_POST['changed_link'.$i]) && isset($_POST['save_change'.$i])) {
+			$id = mysql_real_escape_string((int)$links['id']);
+			$link = mysql_real_escape_string($_POST['changed_link'.$i]);
+			$change_query = "UPDATE cloudlink SET link = '$link' WHERE id = $id";
+				$res = mysql_query($change_query);
+			//header("Location: http://".$_SERVER['SERVER_NAME']."/cloudlink.php");
+			echo '<script>location.reload();</script>';
+			exit();
+		}
+			
+		//удаляем ссылку
+		if (isset($_POST['delete_link'.$i])) {
+			$id = mysql_real_escape_string((int)$links['id']);
+			$delete_query = "UPDATE cloudlink SET deleted = 1 WHERE id = $id";
+				$res = mysql_query($delete_query);
+			//header("Location: http://".$_SERVER['SERVER_NAME']."/cloudlink.php");
+			echo '<script>location.reload();</script>';
+			exit();
+		}
+		
+		//восстанавливаем ссылку
+		if (isset($_POST['restore_link'.$i])) {
+			$id = mysql_real_escape_string((int)$links['id']);
+			$restore_query = "UPDATE cloudlink SET deleted = 0 WHERE id = $id";
+				$res = mysql_query($restore_query);
+			//header("Location: http://".$_SERVER['SERVER_NAME']."/cloudlink.php");
+			echo '<script>location.reload();</script>';
+			exit();
+		}
+	
+		if ($links['deleted'] == 0) {
+			$deleted = 'false';
+			$link = '<a href="http://www.'.$links['link'].'" target="_blank">'.$links['link'].'</a>';
+		} else {
+			$deleted = 'true';
+			$link = $links['link'];
+		}
+		
+		echo '<tr class="'.$deleted.'"><td id="td'.$i.'"><span id="shown'.$i.'">'.$link.'</span>
+			<input type="text" class="change" id="change'.$i.'" name="changed_link'.$i.'" value="'.$links['link'].'" />
+			<input type="submit" class="change" value="ОК" id="save_change'.$i.'" name="save_change'.$i.'">
+			<input type="reset" class="change" id="cancel'.$i.'"></td>
+			<td width="200" id="td'.$i.'">';
+		if ($links['deleted'] == 0) {
+			echo '<input type="submit" name="delete_link'.$i.'" value="Удалить">&nbsp;&nbsp;
+				<input type="button" name="change_link'.$i.'" onClick="change_link('.$i.')" value="Изменить">';
+		} else {
+			echo '<input type="submit" name="restore_link'.$i.'" value="Восстановить">';
+		}
+		echo '</td></tr>';
+
+		$i++;
+	}
+	
+	//отправляем ссылку
+	if (isset($_POST['post_link']) && $_POST['link'] != '') {
+		$new_link = mysql_real_escape_string($_POST['link']);
+		$add_query = "INSERT INTO cloudlink (login, link) VALUES ('$login', '$new_link')";
+			$res = mysql_query($add_query);
+		//header("Location: http://".$_SERVER['SERVER_NAME']."/cloudlink.php");
+		echo '<script>location.reload();</script>';
+		exit();
+	}
+	
+	//уничтожаем удаленные ссылки
+	if (isset($_POST['exterminate'])) {
+		$ext_query = "DELETE FROM cloudlink WHERE deleted = 1";
+			$res = mysql_query($ext_query);
+		//header("Location: http://".$_SERVER['SERVER_NAME']."/cloudlink.php");
+		echo '<script>location.reload();</script>';
+		exit();
+	}
+}
+
+?>
+<html>
+<head>
+</head>
+<body style="display: none;">
+<p id="exit_form" align="right">Вы зашли под логином: <? echo $_COOKIE['login']; ?>&nbsp;&nbsp;&nbsp;<a href="/cloudlink.php/?logout">Выйти</a></p>
+<form action="/cloudlink.php" method="POST">
+<table id="listOfLinks">
+	<th colspan="2">
+		<input type="text" id="link" name="link">
+		<input type="submit" name="post_link" value="Добавить">
+	</th>
+	<? showLinks(); ?>
+	<tr><td colspan="2" align="right">
+	<span title="Alt + S (Chrome)"><input type="checkbox" <? if ($_COOKIE['showDeleted'] == '1') { echo 'checked="checked"'; } ?> name="showDeleted" onClick="changeVisibility()" accesskey="s" id="showDeleted">Показать удаленные</span>&nbsp;&nbsp;
+	<input type="submit" name="exterminate" value="Очистить удаленные"></td></tr>
+</table>
+</form>
+<script type="text/javascript" src="/jquery-2.1.1.js"></script>
+<script>
+$( document ).ready( function() {
+changeVisibility();
+document.body.style.display = "block";
+} );
+
+function changeVisibility() {
+	if ($("#showDeleted").prop("checked") == true) {
+		$(".true").show();
+		document.cookie="showDeleted=1";
+	} else {
+		$(".true").hide();
+		document.cookie="showDeleted=0";
+	}
+};
+
+function change_link(i) {
+	$("#shown" + i).hide();
+	$("#change" + i).show();
+	$("#save_change" + i).show();
+	$("#cancel" + i).show();
+};
+
+</script>
+<style type="text/css">
+	#listOfLinks {
+		width: 100%;
+	}
+	#listOfLinks th {
+		height: 40px;
+		background-color: #5b5;
+	}
+	#listOfLinks tr {
+		text-align: center;
+	}
+	.false {
+		background-color: yellow;
+	}
+	.true {
+		background-color: #ccc;
+		color: #666;
+		display: none;
+	}
+	.change {
+		display: none;
+	}
+	#exit_form {
+		margin-right: 40px;
+	}
+	
+</style>
+<?
+mysql_close();
+?>
+</body>
+</html>
+
+
+
+
+
+
+
+
